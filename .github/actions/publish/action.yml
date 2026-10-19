@@ -1,0 +1,64 @@
+name: publish-module-release
+description: 모듈 산출물을 이 공개 배포 레포의 Release로 올리고 manifests/<module>.json 을 갱신한다.
+inputs:
+  module:
+    description: 모듈 이름 (예 dailynews)
+    required: true
+  version:
+    description: 배포 버전 (예 1.2.0)
+    required: true
+  file:
+    description: 올릴 산출물 경로
+    required: true
+  notice:
+    description: 업데이트 알림에 뜨는 한 줄
+    required: false
+    default: ""
+  token:
+    description: archive-releases 쓰기 권한 토큰 (RELEASES_TOKEN)
+    required: false
+    default: ""
+  repo:
+    description: 배포 레포
+    required: false
+    default: inucreativehrd21/archive-releases
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        MODULE:  ${{ inputs.module }}
+        VERSION: ${{ inputs.version }}
+        FILE:    ${{ inputs.file }}
+        NOTICE:  ${{ inputs.notice }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO:    ${{ inputs.repo }}
+      run: |
+        set -euo pipefail
+        if [ -z "${GH_TOKEN}" ]; then
+          echo "::warning::RELEASES_TOKEN 이 설정되지 않아 배포를 건너뜁니다. (README의 '최초 1회 설정' 참고)"
+          exit 0
+        fi
+        TAG="${MODULE}-v${VERSION}"
+        if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+          echo "이미 배포된 버전입니다: $TAG — 건너뜁니다. (버전을 올려야 배포됩니다)"
+          exit 0
+        fi
+        read -r SHA SIZE < <(python -c "import hashlib,os,sys;p=sys.argv[1];print(hashlib.sha256(open(p,'rb').read()).hexdigest(),os.path.getsize(p))" "$FILE")
+        ASSET="$(basename "$FILE")"
+        printf '%s\n\nsha256: %s\n' "${NOTICE:-$MODULE v$VERSION}" "$SHA" > release-notes.txt
+        gh release create "$TAG" "$FILE" -R "$REPO" --title "$MODULE v$VERSION" --notes-file release-notes.txt
+        URL="https://github.com/$REPO/releases/download/$TAG/$ASSET"
+
+        git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" _rel
+        cd _rel
+        git config user.name  "release-bot"
+        git config user.email "release-bot@users.noreply.github.com"
+        for i in 1 2 3 4 5; do
+          python "$GITHUB_ACTION_PATH/update_manifest.py" "$MODULE" "$VERSION" "$NOTICE" "$URL" "$SHA" "$SIZE"
+          git add manifests
+          git diff --cached --quiet && break
+          git commit -m "release: ${MODULE} v${VERSION}"
+          git push origin HEAD:main && break
+          git pull --rebase origin main
+        done
