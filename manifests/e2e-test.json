@@ -1,0 +1,9 @@
+{
+  "module": "e2e-test",
+  "latestVersion": "0.0.2",
+  "notice": "E2E 테스트 배포",
+  "downloadUrl": "https://github.com/inucreativehrd21/archive-releases/releases/download/e2e-test-v0.0.2/e2e-test-0.0.2.zip",
+  "sha256": "bcd2279145cd0033f625abfc0da0d9c35a53c8900aa5fe2af8ed310ed4e14a10",
+  "minSize": 109,
+  "publishedAt": "2026-10-20T00:44:06Z"
+}
